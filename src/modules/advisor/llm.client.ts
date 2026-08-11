@@ -2,8 +2,11 @@ import { env } from "@config/env";
 
 type LlmMessage = { role: "user" | "assistant"; content: string };
 
-const GEMINI_DEFAULT_MODEL = "gemini-2.0-flash";
+const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash";
 const ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-5";
+// Newer free-tier models Google keeps the current generation; older ones get
+// retired with 404s, so walk this list if the configured model is gone.
+const GEMINI_MODEL_FALLBACKS = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
 
 /**
  * Thin, provider-agnostic LLM client used by the advisor chat.
@@ -40,7 +43,30 @@ async function anthropicReply(system: string, messages: LlmMessage[]): Promise<s
 }
 
 async function geminiReply(system: string, messages: LlmMessage[]): Promise<string> {
-  const model = env.llm.model || GEMINI_DEFAULT_MODEL;
+  const configured = env.llm.model || GEMINI_DEFAULT_MODEL;
+  const models = [configured, ...GEMINI_MODEL_FALLBACKS.filter((m) => m !== configured)];
+
+  let lastError: unknown = null;
+  for (const model of models) {
+    try {
+      return await callGeminiModel(model, system, messages);
+    } catch (err) {
+      lastError = err;
+      if (!isModelUnavailable(err) || model === models[models.length - 1]) {
+        break;
+      }
+      console.warn(`[advisor] Gemini model "${model}" unavailable, trying ${models[models.length - 1]}`);
+    }
+  }
+  throw lastError;
+}
+
+function isModelUnavailable(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /no longer available|not found|does not exist|models\//i.test(err.message);
+}
+
+async function callGeminiModel(model: string, system: string, messages: LlmMessage[]): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60_000);
 
