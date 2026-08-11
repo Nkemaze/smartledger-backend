@@ -1,0 +1,72 @@
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { prisma } from "@config/database";
+import { env } from "@config/env";
+import { Role } from "@prisma/client";
+import { UnauthorizedError, ValidationError } from "@utils/errors";
+import { z } from "zod";
+import { signUpSchema, loginSchema } from "./auth.validation";
+
+type SignUpInput = z.infer<typeof signUpSchema>;
+type LoginInput = z.infer<typeof loginSchema>;
+
+function signToken(payload: { userId: string; businessId: string; role: Role }): string {
+  return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn as jwt.SignOptions["expiresIn"] });
+}
+
+/**
+ * Creates a new Business + its first User.
+ * Per the SRS flexible role model (Section 2.4): the first user registered
+ * for a business is always the OWNER, and by default \u2013 with no staff
+ * added yet \u2013 that single account has full access to everything.
+ */
+export async function signUp(input: SignUpInput) {
+  const existing = await prisma.user.findUnique({ where: { phone: input.phone } });
+  if (existing) {
+    throw new ValidationError("An account with this phone number already exists.");
+  }
+
+  const passwordHash = await bcrypt.hash(input.password, 10);
+
+  const business = await prisma.business.create({
+    data: {
+      name: input.businessName,
+      shopType: input.shopType,
+      users: {
+        create: {
+          name: input.ownerName,
+          phone: input.phone,
+          email: input.email,
+          passwordHash,
+          role: Role.OWNER,
+        },
+      },
+    },
+    include: { users: true },
+  });
+
+  const owner = business.users[0];
+  const token = signToken({ userId: owner.id, businessId: business.id, role: owner.role });
+
+  return { token, user: owner, business };
+}
+
+export async function login(input: LoginInput) {
+  const identifier = input.identifier.trim().toLowerCase();
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [{ email: { equals: identifier, mode: "insensitive" } }, { phone: input.identifier.trim() }],
+    },
+  });
+  if (!user || !user.isActive) {
+    throw new UnauthorizedError("Invalid email/phone or password");
+  }
+
+  const passwordMatches = await bcrypt.compare(input.password, user.passwordHash);
+  if (!passwordMatches) {
+    throw new UnauthorizedError("Invalid email/phone or password");
+  }
+
+  const token = signToken({ userId: user.id, businessId: user.businessId, role: user.role });
+  return { token, user };
+}

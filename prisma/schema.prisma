@@ -1,0 +1,225 @@
+// SmartLedger \u2013 Prisma Schema
+// Notes on offline-sync design:
+// - Every model uses a client-generatable UUID as its primary key (not an
+//   auto-increment int), so a record created offline already has its
+//   permanent ID before it ever reaches the server.
+// - Every model has `updatedAt`, used for last-write-wins conflict resolution
+//   when syncing offline changes back to the server.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  CASHIER
+  ACCOUNTANT
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+model Business {
+  id              String   @id @default(uuid())
+  name            String
+  shopType        String // grocery, boutique, pharmacy, electronics, hardware, other
+  currency        String   @default("XAF")
+  taxId           String?
+  address         String?
+  phone           String?
+  vatRate         Decimal? @db.Decimal(4, 2) // default VAT rate, e.g. 7.50
+  filingFrequency String? // MONTHLY, QUARTERLY, ANNUALLY
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users            User[]
+  products         Product[]
+  customers        Customer[]
+  suppliers        Supplier[]
+  transactions     Transaction[]
+  documents        Document[]
+  notifications    Notification[]
+  taxFilings       TaxFiling[]
+
+  @@map("businesses")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id])
+  name         String
+  phone        String   @unique
+  email        String?  @unique
+  passwordHash String
+  role         Role     @default(OWNER)
+  isActive     Boolean  @default(true)
+  monthlyTarget Decimal? @db.Decimal(12, 2) // optional staff sales target
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@map("users")
+}
+
+model Product {
+  id               String    @id @default(uuid())
+  businessId       String
+  business         Business  @relation(fields: [businessId], references: [id])
+  name             String
+  sku              String?
+  category         String?
+  unitPrice        Decimal   @db.Decimal(12, 2)
+  stockQuantity    Int       @default(0)
+  reorderThreshold Int       @default(5)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  transactionItems TransactionItem[]
+
+  @@index([businessId])
+  @@map("products")
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  businessId String
+  business  Business @relation(fields: [businessId], references: [id])
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  balance   Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([businessId])
+  @@map("customers")
+}
+
+model Supplier {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  balance    Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId])
+  @@map("suppliers")
+}
+
+model Transaction {
+  id          String          @id @default(uuid())
+  businessId  String
+  business    Business        @relation(fields: [businessId], references: [id])
+  type        TransactionType
+  category    String
+  amount      Decimal         @db.Decimal(12, 2)
+  description String?
+  customerId  String?
+  customer    Customer?       @relation(fields: [customerId], references: [id])
+  userId      String?
+  user        User?           @relation(fields: [userId], references: [id])
+  vatRate     Decimal?        @db.Decimal(4, 2)  // applied VAT rate, e.g. 7.50
+  vatAmount   Decimal?        @db.Decimal(12, 2) // VAT portion of this transaction
+  occurredAt  DateTime
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  items      TransactionItem[]
+  documents  Document[]
+
+  @@index([businessId, occurredAt])
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id])
+  quantity      Int
+  unitPrice     Decimal     @db.Decimal(12, 2)
+
+  @@map("transaction_items")
+}
+
+// Digital archive of receipts/invoices (SRS: TAX-REQ-003)
+model Document {
+  id            String       @id @default(uuid())
+  businessId    String
+  business      Business     @relation(fields: [businessId], references: [id])
+  transactionId String?
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+  type          String // receipt, invoice, statement
+  fileUrl       String
+  fileName      String?
+  fileSize      Int?
+  createdAt     DateTime     @default(now())
+
+  @@index([businessId])
+  @@map("documents")
+}
+
+// VAT period filings (SRS: TAX-REQ-001 / VAT ledger)
+model TaxFiling {
+  id            String   @id @default(uuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
+  period        String // e.g. "2026-07"
+  vatCollected  Decimal  @default(0) @db.Decimal(12, 2)
+  vatPaid       Decimal  @default(0) @db.Decimal(12, 2)
+  status        String   @default("DRAFT") // DRAFT, SUBMITTED, PAID
+  dueDate       DateTime?
+  submittedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([businessId, period])
+  @@map("tax_filings")
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+  type       String // low_stock, tax_deadline, ai_insight
+  message    String
+  channel    String // in_app, whatsapp
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([businessId])
+  @@map("notifications")
+}
+
+// Audit log \u2013 required given the last-write-wins offline sync strategy
+model AuditLog {
+  id         String   @id @default(uuid())
+  businessId String
+  userId     String?
+  entityType String // e.g. "Transaction", "Product"
+  entityId   String
+  action     String // create, update, delete
+  changes    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, entityType, entityId])
+  @@map("audit_logs")
+}
