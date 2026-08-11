@@ -40,7 +40,8 @@ export const env = {
     appSecret: process.env.WHATSAPP_APP_SECRET ?? "", // Meta app secret for webhook signature checks
   },
   llm: {
+    provider: process.env.LLM_PROVIDER ?? "anthropic", // "anthropic" | "gemini"
     apiKey: process.env.LLM_API_KEY ?? "",
-    model: process.env.LLM_MODEL ?? "claude-sonnet-4-6",
+    model: process.env.LLM_MODEL ?? "", // resolved per provider when empty
   },
 };

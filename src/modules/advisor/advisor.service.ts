@@ -2,6 +2,7 @@ import { prisma } from "@config/database";
 import { env } from "@config/env";
 import { TransactionType } from "@prisma/client";
 import { getTotals } from "@modules/transactions/transactions.service";
+import { generateReply } from "./llm.client";
 import type { ChatMessage } from "./advisor.validation";
 
 type Insight = {
@@ -218,9 +219,6 @@ export async function chat(businessId: string, message: string, history: ChatMes
 }
 
 async function llmReply(context: ChatContext, message: string, history: ChatMessage[]): Promise<string> {
-  const { Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic({ apiKey: env.llm.apiKey });
-
   const system = [
     "You are SmartLedger's business advisor for small and medium businesses in Cameroon.",
     "You help the owner understand their sales, expenses, inventory, and taxes using the context below.",
@@ -231,20 +229,7 @@ async function llmReply(context: ChatContext, message: string, history: ChatMess
     renderContext(context),
   ].join("\n");
 
-  const response = await client.messages.create({
-    model: env.llm.model,
-    max_tokens: 1024,
-    system,
-    messages: [...history, { role: "user" as const, content: message }],
-  });
-
-  const text = response.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
-
-  return text || "I could not generate an answer right now. Please try again.";
+  return generateReply(system, [...history, { role: "user", content: message }]);
 }
 
 function offlineReply(context: ChatContext, message: string): string {
