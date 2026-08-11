@@ -252,8 +252,7 @@ function offlineReply(context: ChatContext, message: string): string {
 
   lines.push(
     "",
-    "I'm running in offline mode because no AI key is configured, so I can only summarize your current state.",
-    'Add LLM_API_KEY to the backend .env to unlock full natural-language answers (e.g. "What should I reorder this week?").'
+    "Ask me about your sales, expenses, inventory, or taxes, and I'll do my best to help."
   );
 
   return lines.join("\n");
