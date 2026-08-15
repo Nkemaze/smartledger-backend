@@ -16,3 +16,7 @@ export const sendMessageSchema = z.object({
     )
     .optional(),
 });
+
+export const dailySummarySettingsSchema = z.object({
+  enabled: z.boolean(),
+});

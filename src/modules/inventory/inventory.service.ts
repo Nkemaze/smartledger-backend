@@ -4,6 +4,7 @@ import { NotFoundError, ValidationError } from "@utils/errors";
 import { logger } from "@utils/logger";
 import { Role } from "@prisma/client";
 import { sendLowStockAlert, isWhatsAppConfigured } from "@services/whatsapp.service";
+import { sendLowStockEmail, isEmailConfigured } from "@services/email.service";
 import { createProductSchema, updateProductSchema, adjustStockSchema } from "./inventory.validation";
 
 type CreateProductInput = z.infer<typeof createProductSchema>;
@@ -73,13 +74,14 @@ async function maybeAlertLowStock(businessId: string, product: { id: string; nam
     where: { id: businessId },
     select: {
       name: true,
-      users: { select: { phone: true, role: true }, where: { isActive: true } },
+      users: { select: { phone: true, email: true, role: true }, where: { isActive: true } },
     },
   });
 
   const owner = business?.users.find((u) => u.role === Role.OWNER);
   const message = `Low stock alert: ${product.name} has ${product.stockQuantity} left (threshold ${product.reorderThreshold}).`;
 
+  let channel = "in_app";
   if (isWhatsAppConfigured() && owner?.phone) {
     try {
       await sendLowStockAlert(owner.phone, {
@@ -87,13 +89,27 @@ async function maybeAlertLowStock(businessId: string, product: { id: string; nam
         productName: product.name,
         remaining: String(product.stockQuantity),
       });
+      channel = "whatsapp";
     } catch (err) {
       logger.error(`Low-stock WhatsApp alert failed for ${product.name}`, err);
     }
   }
+  if (channel !== "whatsapp" && isEmailConfigured() && owner?.email) {
+    try {
+      await sendLowStockEmail(owner.email, {
+        businessName: business?.name ?? "SmartLedger",
+        productName: product.name,
+        remaining: product.stockQuantity,
+        threshold: product.reorderThreshold,
+      });
+      channel = "email";
+    } catch (err) {
+      logger.error(`Low-stock email alert failed for ${product.name}`, err);
+    }
+  }
 
   await prisma.notification.create({
-    data: { businessId, type: "low_stock", message, channel: "whatsapp" },
+    data: { businessId, type: "low_stock", message, channel },
   });
 }
 

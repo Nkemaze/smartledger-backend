@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { AnyZodObject, ZodError } from "zod";
+import { ZodType, ZodError } from "zod";
 import { ValidationError } from "@utils/errors";
 
 /**
@@ -8,7 +8,7 @@ import { ValidationError } from "@utils/errors";
  *
  * Usage: router.post('/products', validate(createProductSchema), controller)
  */
-export function validate(schema: AnyZodObject) {
+export function validate(schema: ZodType) {
   return (req: Request, _res: Response, next: NextFunction) => {
     try {
       schema.parse(req.body);

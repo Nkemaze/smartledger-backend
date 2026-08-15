@@ -1,12 +1,15 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "@utils/asyncHandler";
 import { created, ok } from "@utils/apiResponse";
+import { isWhatsAppConfigured } from "@services/whatsapp.service";
+import { isEmailConfigured } from "@services/email.service";
 import * as authService from "./auth.service";
 import * as otpService from "./otp.service";
 
 export const signUp = asyncHandler(async (req: Request, res: Response) => {
+  // Verification now happens BEFORE account creation: the code was already
+  // sent via POST /auth/verification/request and is consumed inside signUp.
   const result = await authService.signUp(req.body);
-  await otpService.requestOtp(req.body.phone); // send verification code right after signup
   return created(res, result);
 });
 
@@ -23,4 +26,19 @@ export const requestOtp = asyncHandler(async (req: Request, res: Response) => {
 export const verifyOtp = asyncHandler(async (req: Request, res: Response) => {
   otpService.verifyOtp(req.body.phone, req.body.code);
   return ok(res, { message: "Phone number verified." });
+});
+
+/** POST /auth/verification/request — sends a signup code via WhatsApp or email. */
+export const requestSignupVerification = asyncHandler(async (req: Request, res: Response) => {
+  const { method, destination } = req.body as { method: "whatsapp" | "email"; destination: string };
+  await otpService.requestSignupVerification(method, destination);
+  return ok(res, { message: `Verification code sent via ${method}.` });
+});
+
+/** GET /auth/verification/channels — public: which signup verification methods are live. */
+export const getVerificationChannels = asyncHandler(async (_req: Request, res: Response) => {
+  return ok(res, {
+    whatsapp: isWhatsAppConfigured(),
+    email: isEmailConfigured(),
+  });
 });

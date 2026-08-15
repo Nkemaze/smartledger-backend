@@ -1,5 +1,6 @@
 import { sendSms, generateOtpCode } from "@services/sms.service";
 import { sendOtpMessage, isWhatsAppConfigured } from "@services/whatsapp.service";
+import { sendVerificationEmail, isEmailConfigured } from "@services/email.service";
 import { env } from "@config/env";
 import { logger } from "@utils/logger";
 import { ValidationError } from "@utils/errors";
@@ -9,7 +10,7 @@ import { ValidationError } from "@utils/errors";
 // server restarts and work across multiple backend instances.
 const otpStore = new Map<string, { code: string; expiresAt: number }>();
 
-const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
  * Delivers the OTP over the configured channel(s):
@@ -55,4 +56,97 @@ export function verifyOtp(phone: string, code: string): void {
   }
 
   otpStore.delete(phone);
+}
+
+// ---------------------------------------------------------------------------
+// Signup verification — user chooses WhatsApp or email at account creation.
+// ---------------------------------------------------------------------------
+
+export type VerificationMethod = "whatsapp" | "email";
+
+interface SignupEntry {
+  code: string;
+  expiresAt: number;
+  attemptsLeft: number;
+  resendAvailableAt: number;
+}
+
+const SIGNUP_TTL_MS = 10 * 60 * 1000; // codes live 10 minutes
+const MAX_ATTEMPTS = 5;
+const RESEND_COOLDOWN_MS = 45 * 1000;
+const signupStore = new Map<string, SignupEntry>();
+
+function signupKey(method: VerificationMethod, destination: string): string {
+  return `${method}:${destination}`;
+}
+
+async function deliverSignupCode(method: VerificationMethod, destination: string, code: string): Promise<void> {
+  if (method === "whatsapp") {
+    if (!isWhatsAppConfigured()) {
+      // WhatsApp disabled or unconfigured — email is the working alternative.
+      throw new ValidationError("WhatsApp verification is temporarily unavailable. Please verify via email.");
+    }
+    // Uses the smartledger_otp template (renders as plain text on unipile).
+    await sendOtpMessage(destination, code);
+    return;
+  }
+  if (!isEmailConfigured()) {
+    // Fail loudly rather than pretending to send — the user would wait
+    // forever for an email that never comes.
+    throw new ValidationError(
+      "Email delivery is not configured on the server. Set SMTP_HOST/SMTP_USER/SMTP_PASSWORD/EMAIL_FROM, or verify via WhatsApp."
+    );
+  }
+  await sendVerificationEmail(destination, code);
+}
+
+/** Generates and sends a signup verification code (WhatsApp or email). */
+export async function requestSignupVerification(
+  method: VerificationMethod,
+  destination: string
+): Promise<void> {
+  const key = signupKey(method, destination);
+  const existing = signupStore.get(key);
+  if (existing && existing.resendAvailableAt > Date.now()) {
+    const wait = Math.ceil((existing.resendAvailableAt - Date.now()) / 1000);
+    throw new ValidationError(`Please wait ${wait}s before requesting a new code.`);
+  }
+
+  const code = generateOtpCode();
+  signupStore.set(key, {
+    code,
+    expiresAt: Date.now() + SIGNUP_TTL_MS,
+    attemptsLeft: MAX_ATTEMPTS,
+    resendAvailableAt: Date.now() + RESEND_COOLDOWN_MS,
+  });
+
+  await deliverSignupCode(method, destination, code);
+}
+
+/** Validates and consumes a signup code. Throws ValidationError on failure. */
+export function consumeSignupVerification(
+  method: VerificationMethod,
+  destination: string,
+  code: string
+): void {
+  const key = signupKey(method, destination);
+  const entry = signupStore.get(key);
+
+  if (!entry || entry.expiresAt < Date.now()) {
+    signupStore.delete(key);
+    throw new ValidationError("Verification code has expired. Please request a new one.");
+  }
+
+  if (entry.code !== code) {
+    entry.attemptsLeft -= 1;
+    if (entry.attemptsLeft <= 0) {
+      signupStore.delete(key);
+      throw new ValidationError("Too many incorrect attempts. Please request a new code.");
+    }
+    throw new ValidationError(
+      `Incorrect verification code. ${entry.attemptsLeft} attempt(s) left.`
+    );
+  }
+
+  signupStore.delete(key);
 }

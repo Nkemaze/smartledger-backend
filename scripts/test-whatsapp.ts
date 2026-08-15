@@ -8,12 +8,16 @@ function printGuide(): void {
   console.log(`
 WhatsApp credentials are not configured yet. To enable real sends, set these in .env:
 
-  WHATSAPP_PROVIDER=meta
-  WHATSAPP_ACCESS_TOKEN=<permanent token from Meta System User>
-  WHATSAPP_PHONE_NUMBER_ID=<phone number id from the WhatsApp test number>
+  Unipile (easiest, no WABA/templates needed):
+    WHATSAPP_PROVIDER=unipile
+    UNIPILE_API_KEY=<from https://app.unipile.com/>
+    UNIPILE_ACCOUNT_ID=<connected WhatsApp account id>
 
-Then create the template "daily_sales_summary" (Utility) in WhatsApp Manager:
-  {{1}}, here's your daily summary - Income: {{2}}, Expenses: {{3}}, Profit: {{4}}. Keep growing with SmartLedger!
+  or Meta Cloud API:
+    WHATSAPP_PROVIDER=meta
+    WHATSAPP_ACCESS_TOKEN=<permanent token from Meta System User>
+    WHATSAPP_PHONE_NUMBER_ID=<phone number id from the WhatsApp test number>
+    (then create the "daily_sales_summary" template in WhatsApp Manager)
 `);
 }
 
@@ -39,7 +43,11 @@ async function main(): Promise<void> {
     currency: "XAF",
   });
 
-  console.log("Sent. Check WhatsApp on the recipient number. (Template must be APPROVED.)");
+  if (env.whatsapp.provider === "unipile") {
+    console.log("Sent. Check WhatsApp on the recipient number.");
+  } else {
+    console.log("Sent. Check WhatsApp on the recipient number. (Template must be APPROVED.)");
+  }
 }
 
 main().catch((err) => {

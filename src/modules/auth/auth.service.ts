@@ -6,6 +6,7 @@ import { Role } from "@prisma/client";
 import { UnauthorizedError, ValidationError } from "@utils/errors";
 import { z } from "zod";
 import { signUpSchema, loginSchema } from "./auth.validation";
+import { consumeSignupVerification, VerificationMethod } from "./otp.service";
 
 type SignUpInput = z.infer<typeof signUpSchema>;
 type LoginInput = z.infer<typeof loginSchema>;
@@ -15,16 +16,30 @@ function signToken(payload: { userId: string; businessId: string; role: Role }):
 }
 
 /**
- * Creates a new Business + its first User.
+ * Creates a new Business + its first User after verifying the signup code.
  * Per the SRS flexible role model (Section 2.4): the first user registered
- * for a business is always the OWNER, and by default \u2013 with no staff
- * added yet \u2013 that single account has full access to everything.
+ * for a business is always the OWNER, and by default – with no staff
+ * added yet – that single account has full access to everything.
+ *
+ * Verification: the code is delivered at POST /auth/verification/request
+ * over WhatsApp (to the phone) or email. The chosen destination is what
+ * gets marked verified on the created account.
  */
 export async function signUp(input: SignUpInput) {
   const existing = await prisma.user.findUnique({ where: { phone: input.phone } });
   if (existing) {
     throw new ValidationError("An account with this phone number already exists.");
   }
+
+  if (input.email) {
+    const existingEmail = await prisma.user.findUnique({ where: { email: input.email } });
+    if (existingEmail) {
+      throw new ValidationError("An account with this email already exists.");
+    }
+  }
+
+  const destination = input.verificationMethod === "whatsapp" ? input.phone : input.email!;
+  consumeSignupVerification(input.verificationMethod as VerificationMethod, destination, input.verificationCode);
 
   const passwordHash = await bcrypt.hash(input.password, 10);
 
@@ -39,6 +54,8 @@ export async function signUp(input: SignUpInput) {
           email: input.email,
           passwordHash,
           role: Role.OWNER,
+          phoneVerified: input.verificationMethod === "whatsapp",
+          emailVerified: input.verificationMethod === "email",
         },
       },
     },
