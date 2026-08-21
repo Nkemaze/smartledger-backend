@@ -33,3 +33,9 @@ export class ValidationError extends AppError {
     super(message, 422);
   }
 }
+
+export class PaymentRequiredError extends AppError {
+  constructor(message = "Your SmartLedger subscription has expired. Please choose a plan to continue.") {
+    super(message, 402);
+  }
+}

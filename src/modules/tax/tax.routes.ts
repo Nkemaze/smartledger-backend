@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "@middleware/auth.middleware";
+import { requireActiveSubscription } from "@middleware/subscription.middleware";
 import { validate } from "@middleware/validate.middleware";
 import { createFilingSchema, updateFilingSchema } from "./tax.validation";
 import * as taxController from "./tax.controller";
@@ -7,6 +8,7 @@ import * as taxController from "./tax.controller";
 const router = Router();
 
 router.use(authMiddleware);
+router.use(requireActiveSubscription);
 
 router.get("/", taxController.getTaxSummary);
 router.get("/vat-ledger", taxController.getVatLedger);

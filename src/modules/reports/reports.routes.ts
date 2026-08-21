@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "@middleware/auth.middleware";
+import { requireActiveSubscription } from "@middleware/subscription.middleware";
 import { requireRole } from "@middleware/role.middleware";
 import { Role } from "@prisma/client";
 import * as reportController from "./reports.controller";
@@ -7,6 +8,7 @@ import * as reportController from "./reports.controller";
 const router = Router();
 
 router.use(authMiddleware);
+router.use(requireActiveSubscription);
 
 // ACCOUNTANT + OWNER can view financial reports; CASHIER gets dashboard basics.
 router.get("/dashboard", reportController.getDashboard);

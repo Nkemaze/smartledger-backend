@@ -17,6 +17,7 @@ import { Role, TransactionType } from "@prisma/client";
 import { prisma } from "@config/database";
 import { createTransaction } from "@modules/transactions/transactions.service";
 import { createFiling } from "@modules/tax/tax.service";
+import { buildTrialData } from "@modules/subscriptions/subscriptions.service";
 
 const OWNER_PHONE = "6512345678";
 const OWNER_PASSWORD = "password123";
@@ -46,6 +47,9 @@ async function seed() {
       phone: "+237 651 234 567",
       vatRate: 7.5,
       filingFrequency: "MONTHLY",
+      subscription: {
+        create: buildTrialData(),
+      },
     },
   });
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "@middleware/auth.middleware";
+import { requireActiveSubscription } from "@middleware/subscription.middleware";
 import { requireRole } from "@middleware/role.middleware";
 import { validate } from "@middleware/validate.middleware";
 import { createProductSchema, updateProductSchema, adjustStockSchema } from "./inventory.validation";
@@ -9,6 +10,7 @@ import { Role } from "@prisma/client";
 const router = Router();
 
 router.use(authMiddleware);
+router.use(requireActiveSubscription);
 
 router.get("/", inventoryController.listProducts);
 router.post("/", validate(createProductSchema), inventoryController.createProduct);

@@ -18,6 +18,7 @@ import reportRoutes from "@modules/reports/reports.routes";
 import notificationRoutes from "@modules/notifications/notifications.routes";
 import syncRoutes from "@modules/sync/sync.routes";
 import archiveRoutes from "@modules/archive/archive.routes";
+import subscriptionRoutes from "@modules/subscriptions/subscriptions.routes";
 
 export const app = express();
 
@@ -56,6 +57,7 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/archive", archiveRoutes);
+app.use("/api/subscriptions", subscriptionRoutes);
 
 // Must be registered last
 app.use(errorMiddleware);

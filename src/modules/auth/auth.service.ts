@@ -7,6 +7,7 @@ import { UnauthorizedError, ValidationError } from "@utils/errors";
 import { z } from "zod";
 import { signUpSchema, loginSchema } from "./auth.validation";
 import { consumeSignupVerification, VerificationMethod } from "./otp.service";
+import { buildTrialData } from "@modules/subscriptions/subscriptions.service";
 
 type SignUpInput = z.infer<typeof signUpSchema>;
 type LoginInput = z.infer<typeof loginSchema>;
@@ -47,6 +48,10 @@ export async function signUp(input: SignUpInput) {
     data: {
       name: input.businessName,
       shopType: input.shopType,
+      // Business Plan §2.4: every new business starts on the 1-month free trial.
+      subscription: {
+        create: buildTrialData(),
+      },
       users: {
         create: {
           name: input.ownerName,

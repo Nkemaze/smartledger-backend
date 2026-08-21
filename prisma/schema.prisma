@@ -26,6 +26,13 @@ enum TransactionType {
   EXPENSE
 }
 
+enum SubscriptionPlan {
+  FREE_TRIAL
+  BASIC
+  STANDARD
+  PREMIUM
+}
+
 model Business {
   id              String   @id @default(uuid())
   name            String
@@ -47,8 +54,27 @@ model Business {
   documents        Document[]
   notifications    Notification[]
   taxFilings       TaxFiling[]
+  subscription     Subscription?
 
   @@map("businesses")
+}
+
+// Subscription/billing state per business (Business Plan §2.4:
+// Basic 3,500 FCFA/mo, Standard 7,500 FCFA/mo, Premium 12,500 FCFA/mo,
+// plus a 1-month FREE_TRIAL granted automatically at signup).
+// Effective status is derived from plan + dates (see subscriptions.service).
+model Subscription {
+  id           String           @id @default(uuid())
+  businessId   String           @unique
+  business     Business         @relation(fields: [businessId], references: [id])
+  plan         SubscriptionPlan @default(FREE_TRIAL)
+  trialStartedAt DateTime? // set once the free trial has been used
+  trialEndsAt    DateTime?
+  periodEndsAt   DateTime? // paid subscription valid until this date
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@map("subscriptions")
 }
 
 model User {
