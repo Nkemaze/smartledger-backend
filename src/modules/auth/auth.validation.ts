@@ -8,8 +8,8 @@ export const signUpSchema = z
     phone: z.string().min(8),
     email: z.string().email().optional(),
     password: z.string().min(8, "Password must be at least 8 characters"),
-    verificationMethod: z.enum(["whatsapp", "email"]),
-    verificationCode: z.string().length(6, "Enter the 6-digit verification code"),
+    verificationMethod: z.enum(["whatsapp", "email"]).optional(),
+    verificationCode: z.string().length(6, "Enter the 6-digit verification code").optional(),
   })
   .refine((data) => data.verificationMethod !== "email" || Boolean(data.email), {
     message: "An email address is required to verify via email.",

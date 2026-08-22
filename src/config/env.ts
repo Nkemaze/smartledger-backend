@@ -15,6 +15,7 @@ export const env = {
   jwtSecret: required("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
   otpChannel: process.env.OTP_CHANNEL ?? "whatsapp", // whatsapp | sms | both
+  signupVerificationRequired: process.env.SIGNUP_VERIFICATION_REQUIRED !== "false",
   sms: {
     provider: process.env.SMS_PROVIDER ?? "africastalking",
     africasTalkingApiKey: process.env.AFRICASTALKING_API_KEY ?? "",

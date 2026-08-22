@@ -39,8 +39,10 @@ export async function signUp(input: SignUpInput) {
     }
   }
 
-  const destination = input.verificationMethod === "whatsapp" ? input.phone : input.email!;
-  consumeSignupVerification(input.verificationMethod as VerificationMethod, destination, input.verificationCode);
+  if (env.signupVerificationRequired) {
+    const destination = input.verificationMethod === "whatsapp" ? input.phone : input.email!;
+    consumeSignupVerification(input.verificationMethod as VerificationMethod, destination, input.verificationCode!);
+  }
 
   const passwordHash = await bcrypt.hash(input.password, 10);
 
@@ -59,8 +61,10 @@ export async function signUp(input: SignUpInput) {
           email: input.email,
           passwordHash,
           role: Role.OWNER,
-          phoneVerified: input.verificationMethod === "whatsapp",
-          emailVerified: input.verificationMethod === "email",
+          // When signup verification is disabled (SIGNUP_VERIFICATION_REQUIRED=false)
+          // the account is trusted outright and both destinations are marked verified.
+          phoneVerified: !env.signupVerificationRequired || input.verificationMethod === "whatsapp",
+          emailVerified: !env.signupVerificationRequired || input.verificationMethod === "email",
         },
       },
     },

@@ -3,6 +3,7 @@ import { asyncHandler } from "@utils/asyncHandler";
 import { created, ok } from "@utils/apiResponse";
 import { isWhatsAppConfigured } from "@services/whatsapp.service";
 import { isEmailConfigured } from "@services/email.service";
+import { env } from "@config/env";
 import * as authService from "./auth.service";
 import * as otpService from "./otp.service";
 
@@ -31,6 +32,11 @@ export const verifyOtp = asyncHandler(async (req: Request, res: Response) => {
 /** POST /auth/verification/request — sends a signup code via WhatsApp or email. */
 export const requestSignupVerification = asyncHandler(async (req: Request, res: Response) => {
   const { method, destination } = req.body as { method: "whatsapp" | "email"; destination: string };
+  if (!env.signupVerificationRequired) {
+    // Verification temporarily disabled server-side — succeed without sending
+    // so older clients (mobile APKs already in the wild) keep working.
+    return ok(res, { message: "Verification is currently disabled." });
+  }
   await otpService.requestSignupVerification(method, destination);
   return ok(res, { message: `Verification code sent via ${method}.` });
 });
@@ -40,5 +46,6 @@ export const getVerificationChannels = asyncHandler(async (_req: Request, res: R
   return ok(res, {
     whatsapp: isWhatsAppConfigured(),
     email: isEmailConfigured(),
+    required: env.signupVerificationRequired,
   });
 });
