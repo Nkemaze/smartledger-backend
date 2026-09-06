@@ -3,6 +3,7 @@ import { asyncHandler } from "@utils/asyncHandler";
 import { ok } from "@utils/apiResponse";
 import { SubscriptionPlan } from "@prisma/client";
 import { PLAN_CATALOG } from "./plans";
+import type { BillingCycle } from "./subscriptions.service";
 import * as subscriptionsService from "./subscriptions.service";
 
 export const getSubscription = asyncHandler(async (req: Request, res: Response) => {
@@ -15,7 +16,11 @@ export const getPlans = asyncHandler(async (_req: Request, res: Response) => {
 });
 
 export const selectPlan = asyncHandler(async (req: Request, res: Response) => {
-  const view = await subscriptionsService.selectPlan(req.user!.businessId, req.body.plan as SubscriptionPlan);
+  const view = await subscriptionsService.selectPlan(
+    req.user!.businessId,
+    req.body.plan as SubscriptionPlan,
+    req.body.billingCycle as BillingCycle | undefined,
+  );
   return ok(res, view);
 });
 

@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { Subscription } from "@prisma/client";
-import { addDays, buildTrialData, resolveStatus } from "../../src/modules/subscriptions/subscriptions.service";
+import {
+  addDays,
+  buildTrialData,
+  resolveStatus,
+} from "../../src/modules/subscriptions/subscriptions.service";
+import {
+  ANNUAL_BILLED_MONTHS,
+  annualPriceFor,
+  PLAN_CATALOG,
+} from "../../src/modules/subscriptions/plans";
 
 function makeSub(overrides: Partial<Subscription> = {}): Subscription {
   return {
@@ -53,5 +62,17 @@ describe("subscriptions.service", () => {
   it("resolveStatus reports EXPIRED when there are no dates at all", () => {
     const { status } = resolveStatus(makeSub());
     expect(status).toBe("EXPIRED");
+  });
+
+  it("annual billing charges 10 months for a year (2 months free)", () => {
+    expect(ANNUAL_BILLED_MONTHS).toBe(10);
+    expect(annualPriceFor(2500)).toBe(25000);
+    expect(annualPriceFor(7500)).toBe(75000);
+    expect(annualPriceFor(12500)).toBe(125000);
+  });
+
+  it("Basic is priced at 2,500 FCFA/month", () => {
+    expect(PLAN_CATALOG.BASIC.monthlyPrice).toBe(2500);
+    expect(PLAN_CATALOG.BASIC.annualPrice).toBe(PLAN_CATALOG.BASIC.monthlyPrice * 10);
   });
 });

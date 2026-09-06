@@ -1,7 +1,15 @@
 import { prisma } from "@config/database";
 import { Subscription, SubscriptionPlan } from "@prisma/client";
 import { ValidationError } from "@utils/errors";
-import { FREE_TRIAL_DAYS, PAID_PLANS, PLAN_CATALOG } from "./plans";
+import {
+  ANNUAL_DAYS,
+  FREE_TRIAL_DAYS,
+  MONTHLY_DAYS,
+  PAID_PLANS,
+  PLAN_CATALOG,
+} from "./plans";
+
+export type BillingCycle = "monthly" | "annual";
 
 export type SubscriptionStatus = "TRIALING" | "ACTIVE" | "EXPIRED";
 
@@ -101,12 +109,17 @@ export async function startFreeTrial(businessId: string): Promise<SubscriptionVi
 }
 
 /**
- * Activates a paid plan for one month. If a paid period is still running,
- * the new month is appended to its end (unused time is kept).
+ * Activates a paid plan for one billing cycle (monthly or annual). If a paid
+ * period is still running, the new cycle is appended to its end (unused time is
+ * kept). Annual billing grants 365 days (12 months) for the price of 10 months.
  * NOTE: actual payment collection (mobile money) is a follow-up; selecting
  * a plan currently activates it directly.
  */
-export async function selectPlan(businessId: string, plan: SubscriptionPlan): Promise<SubscriptionView> {
+export async function selectPlan(
+  businessId: string,
+  plan: SubscriptionPlan,
+  billingCycle: BillingCycle = "monthly",
+): Promise<SubscriptionView> {
   if (plan === "FREE_TRIAL") {
     return startFreeTrial(businessId);
   }
@@ -114,13 +127,14 @@ export async function selectPlan(businessId: string, plan: SubscriptionPlan): Pr
     throw new ValidationError("Unknown subscription plan.");
   }
 
+  const days = billingCycle === "annual" ? ANNUAL_DAYS : MONTHLY_DAYS;
   const sub = await getOrCreateSubscription(businessId);
   const now = new Date();
   const currentEnd = sub.periodEndsAt && sub.periodEndsAt.getTime() > now.getTime() ? sub.periodEndsAt : now;
 
   const updated = await prisma.subscription.update({
     where: { id: sub.id },
-    data: { plan, periodEndsAt: addDays(currentEnd, 30) },
+    data: { plan, periodEndsAt: addDays(currentEnd, days) },
   });
   return toView(updated);
 }
