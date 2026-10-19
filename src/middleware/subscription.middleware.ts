@@ -14,6 +14,15 @@ export async function requireActiveSubscription(req: Request, _res: Response, ne
       throw new UnauthorizedError();
     }
 
+    // Platform super-admins have no business subscription to check.
+    if (req.user.platformAdmin && !req.user.businessId) {
+      return next();
+    }
+
+    if (!req.user.businessId) {
+      throw new UnauthorizedError("No business associated with this account");
+    }
+
     const active = await isSubscriptionActive(req.user.businessId);
     if (!active) {
       throw new PaymentRequiredError();

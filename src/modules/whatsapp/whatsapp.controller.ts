@@ -1,3 +1,4 @@
+import { getBusinessId } from '@middleware/auth.middleware';
 import { Request, Response } from "express";
 import { ok } from "@utils/apiResponse";
 import { asyncHandler } from "@utils/asyncHandler";
@@ -150,7 +151,7 @@ export const testDailySummary = asyncHandler(async (req: Request, res: Response)
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
   if (!user?.phone) throw new ValidationError("Your account has no phone number");
 
-  const business = await prisma.business.findUnique({ where: { id: req.user!.businessId } });
+  const business = await prisma.business.findUnique({ where: { id: getBusinessId(req) } });
   if (!business) throw new NotFoundError("Business");
 
   const summary = await computeDailySummary(business.id, new Date());

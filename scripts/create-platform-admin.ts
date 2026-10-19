@@ -1,28 +1,23 @@
 /* eslint-disable no-console */
 /**
- * Creates a platform SUPERADMIN account attached to an existing business.
+ * Creates a platform SUPERADMIN account that is NOT attached to any business.
+ *
+ * Platform admins sit above all stores, so they have no businessId of their
+ * own (see the `platform_admin_no_business` migration).
  *
  * Usage:
- *   npx tsx scripts/create-platform-admin.ts <email> <password> <phone> "<business name>"
+ *   npx tsx scripts/create-platform-admin.ts <email> <password> <phone> [name]
  */
 import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { prisma } from "../src/config/database";
 
 async function main() {
-  const [email, password, phone, businessName] = process.argv.slice(2);
-  if (!email || !password || !phone || !businessName) {
+  const [email, password, phone, name] = process.argv.slice(2);
+  if (!email || !password || !phone) {
     console.error(
-      'Usage: npx tsx scripts/create-platform-admin.ts <email> <password> <phone> "<business name>"',
+      'Usage: npx tsx scripts/create-platform-admin.ts <email> <password> <phone> [name]',
     );
-    process.exit(1);
-  }
-
-  const business = await prisma.business.findFirst({
-    where: { name: { equals: businessName, mode: "insensitive" } },
-  });
-  if (!business) {
-    console.error(`No business found named "${businessName}"`);
     process.exit(1);
   }
 
@@ -42,8 +37,8 @@ async function main() {
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
     data: {
-      businessId: business.id,
-      name: "Nkemaze Bless",
+      businessId: null,
+      name: name || "Platform Admin",
       email: email.toLowerCase(),
       phone: normPhone,
       passwordHash,
@@ -52,13 +47,12 @@ async function main() {
       phoneVerified: true,
       emailVerified: true,
     },
-    include: { business: true },
   });
 
   console.log(`Created platform admin ${user.name}`);
   console.log(`  email : ${user.email}`);
   console.log(`  phone : ${user.phone}`);
-  console.log(`  business: ${user.business.name}`);
+  console.log(`  business: (none — platform-wide)`);
   console.log(`  role  : ${user.role} (platformAdmin=${user.platformAdmin})`);
 }
 

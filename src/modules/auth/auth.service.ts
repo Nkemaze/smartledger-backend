@@ -12,7 +12,7 @@ import { buildTrialData } from "@modules/subscriptions/subscriptions.service";
 type SignUpInput = z.infer<typeof signUpSchema>;
 type LoginInput = z.infer<typeof loginSchema>;
 
-function signToken(payload: { userId: string; businessId: string; role: Role; platformAdmin?: boolean }): string {
+function signToken(payload: { userId: string; businessId: string | null; role: Role; platformAdmin?: boolean }): string {
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn as jwt.SignOptions["expiresIn"] });
 }
 

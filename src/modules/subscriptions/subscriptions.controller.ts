@@ -1,3 +1,4 @@
+import { getBusinessId } from '@middleware/auth.middleware';
 import { Request, Response } from "express";
 import { asyncHandler } from "@utils/asyncHandler";
 import { ok } from "@utils/apiResponse";
@@ -7,7 +8,7 @@ import type { BillingCycle } from "./subscriptions.service";
 import * as subscriptionsService from "./subscriptions.service";
 
 export const getSubscription = asyncHandler(async (req: Request, res: Response) => {
-  const view = await subscriptionsService.getSubscriptionView(req.user!.businessId);
+  const view = await subscriptionsService.getSubscriptionView(getBusinessId(req));
   return ok(res, view);
 });
 
@@ -17,7 +18,7 @@ export const getPlans = asyncHandler(async (_req: Request, res: Response) => {
 
 export const selectPlan = asyncHandler(async (req: Request, res: Response) => {
   const view = await subscriptionsService.selectPlan(
-    req.user!.businessId,
+    getBusinessId(req),
     req.body.plan as SubscriptionPlan,
     req.body.billingCycle as BillingCycle | undefined,
   );
@@ -25,6 +26,6 @@ export const selectPlan = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const startTrial = asyncHandler(async (req: Request, res: Response) => {
-  const view = await subscriptionsService.startFreeTrial(req.user!.businessId);
+  const view = await subscriptionsService.startFreeTrial(getBusinessId(req));
   return ok(res, view);
 });

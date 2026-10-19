@@ -81,8 +81,10 @@ model Subscription {
 
 model User {
   id           String   @id @default(uuid())
-  businessId   String
-  business     Business @relation(fields: [businessId], references: [id])
+  // Nullable: platform/super-admin accounts are not tied to any single
+  // business. Regular business users (OWNER/CASHIER/ACCOUNTANT) always have one.
+  businessId   String?
+  business     Business? @relation(fields: [businessId], references: [id])
   name         String
   phone        String   @unique
   email        String?  @unique
