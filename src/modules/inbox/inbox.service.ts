@@ -143,7 +143,7 @@ export async function unreadCount(businessId: string) {
 }
 
 /** Sends a reply through the active WhatsApp provider and stores it as OUTBOUND. */
-export async function sendReply(businessId: string, contactPhone: string, text: string) {
+export async function sendReply(businessId: string | null, contactPhone: string, text: string) {
   const trimmed = text.trim();
   if (!trimmed) throw new ValidationError("Message text is required.");
 
@@ -164,4 +164,94 @@ export async function sendReply(businessId: string, contactPhone: string, text: 
       status: "sent",
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Platform super-admin inbox
+//
+// The admin sees messages across every business. A `businessId` filter of
+// "unassigned" narrows to messages sent directly to the platform number
+// (businessId = null); a concrete business id scopes to that store. Omitting
+// the filter returns everything (full platform oversight).
+// ---------------------------------------------------------------------------
+
+export interface AdminConversationSummary extends ConversationSummary {
+  businessId: string | null
+  businessName: string | null
+}
+
+export type AdminInboxScope = { businessId?: string | null }
+
+function adminWhere(scope: AdminInboxScope) {
+  if (scope.businessId === undefined) return {}
+  if (scope.businessId === null) return { businessId: null }
+  return { businessId: scope.businessId }
+}
+
+/** One row per (contact, business): last message + unread count. */
+export async function listAdminConversations(scope: AdminInboxScope = {}): Promise<AdminConversationSummary[]> {
+  const messages = await prisma.whatsappMessage.findMany({
+    where: adminWhere(scope),
+    orderBy: { createdAt: "desc" },
+    take: 2000,
+    include: { business: { select: { id: true, name: true } } },
+  })
+
+  const byKey = new Map<string, AdminConversationSummary>()
+  for (const m of messages) {
+    const key = `${m.businessId ?? "unassigned"}::${m.contactPhone}`
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, {
+        contactPhone: m.contactPhone,
+        contactName: m.contactName,
+        lastMessage: m.text,
+        lastDirection: m.direction,
+        lastAt: m.createdAt.toISOString(),
+        unreadCount: 0,
+        businessId: m.businessId,
+        businessName: m.business?.name ?? null,
+      })
+    }
+    if (m.direction === MessageDirection.INBOUND && m.status !== "read") {
+      byKey.get(key)!.unreadCount += 1
+    }
+  }
+  return Array.from(byKey.values())
+}
+
+/** Full thread with one contact within a scope. Marks inbound as read. */
+export async function listAdminThread(scope: AdminInboxScope, contactPhone: string) {
+  const norm = normalisePhone(contactPhone)
+
+  await prisma.whatsappMessage.updateMany({
+    where: {
+      ...adminWhere(scope),
+      contactPhone: norm,
+      direction: MessageDirection.INBOUND,
+      status: { not: "read" },
+    },
+    data: { status: "read" },
+  })
+
+  return prisma.whatsappMessage.findMany({
+    where: { ...adminWhere(scope), contactPhone: norm },
+    orderBy: { createdAt: "asc" },
+  })
+}
+
+export async function adminUnreadCount(scope: AdminInboxScope = {}) {
+  return prisma.whatsappMessage.count({
+    where: { ...adminWhere(scope), direction: MessageDirection.INBOUND, status: { not: "read" } },
+  })
+}
+
+/** Businesses that have at least one WhatsApp conversation, for the filter. */
+export async function listInboxBusinesses() {
+  const rows = await prisma.whatsappMessage.findMany({
+    where: { businessId: { not: null } },
+    distinct: ["businessId"],
+    select: { business: { select: { id: true, name: true } } },
+  })
+  return rows.map((r) => r.business!).filter(Boolean)
 }
