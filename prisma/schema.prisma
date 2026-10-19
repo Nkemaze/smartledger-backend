@@ -19,6 +19,7 @@ enum Role {
   OWNER
   CASHIER
   ACCOUNTANT
+  SUPERADMIN
 }
 
 enum TransactionType {
@@ -55,6 +56,7 @@ model Business {
   notifications    Notification[]
   taxFilings       TaxFiling[]
   subscription     Subscription?
+  whatsappMessages WhatsappMessage[]
 
   @@map("businesses")
 }
@@ -89,6 +91,7 @@ model User {
   isActive     Boolean  @default(true)
   phoneVerified Boolean @default(false) // verified via WhatsApp code at signup
   emailVerified Boolean @default(false) // verified via email code at signup
+  platformAdmin Boolean @default(false) // platform/super admin account
   dailySummaryEnabled Boolean @default(true) // WhatsApp end-of-day transaction summary opt-in
   monthlyTarget Decimal? @db.Decimal(12, 2) // optional staff sales target
   createdAt    DateTime @default(now())
@@ -251,4 +254,33 @@ model AuditLog {
 
   @@index([businessId, entityType, entityId])
   @@map("audit_logs")
+}
+
+// WhatsApp conversation messages (SRS: WA-REQ-004 – human inbox).
+// businessId is nullable: inbound messages from unknown numbers (not yet
+// matched to a customer/staff) are stored unassigned and surfaced to the
+// platform super-admin for triage.
+model WhatsappMessage {
+  id            String           @id @default(uuid())
+  businessId    String?
+  business      Business?        @relation(fields: [businessId], references: [id])
+  customerId    String?          // resolved Customer when the sender matches one
+  contactPhone  String           // counterparty phone, digits-normalised for matching
+  contactName   String?          // resolved from Customer/User when known
+  direction     MessageDirection // INBOUND from customer, OUTBOUND from staff
+  text          String
+  messageType   String           @default("text") // text, image, document, etc.
+  status        String           @default("received") // received, sent, delivered, read, failed
+  providerMsgId String?          // Meta/WhatsApp message id, for status correlation
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([businessId, contactPhone, createdAt])
+  @@index([businessId, createdAt])
+  @@map("whatsapp_messages")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
 }

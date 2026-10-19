@@ -12,7 +12,7 @@ import { buildTrialData } from "@modules/subscriptions/subscriptions.service";
 type SignUpInput = z.infer<typeof signUpSchema>;
 type LoginInput = z.infer<typeof loginSchema>;
 
-function signToken(payload: { userId: string; businessId: string; role: Role }): string {
+function signToken(payload: { userId: string; businessId: string; role: Role; platformAdmin?: boolean }): string {
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn as jwt.SignOptions["expiresIn"] });
 }
 
@@ -72,7 +72,7 @@ export async function signUp(input: SignUpInput) {
   });
 
   const owner = business.users[0];
-  const token = signToken({ userId: owner.id, businessId: business.id, role: owner.role });
+  const token = signToken({ userId: owner.id, businessId: business.id, role: owner.role, platformAdmin: owner.platformAdmin });
 
   return { token, user: owner, business };
 }
@@ -93,6 +93,6 @@ export async function login(input: LoginInput) {
     throw new UnauthorizedError("Invalid email/phone or password");
   }
 
-  const token = signToken({ userId: user.id, businessId: user.businessId, role: user.role });
+  const token = signToken({ userId: user.id, businessId: user.businessId, role: user.role, platformAdmin: user.platformAdmin });
   return { token, user };
 }

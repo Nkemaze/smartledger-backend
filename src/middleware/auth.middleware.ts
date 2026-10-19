@@ -8,6 +8,7 @@ export interface AuthPayload {
   userId: string;
   businessId: string;
   role: Role;
+  platformAdmin?: boolean;
 }
 
 // Augment Express's Request type so req.user is typed everywhere.

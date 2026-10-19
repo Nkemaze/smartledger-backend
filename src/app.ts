@@ -19,6 +19,8 @@ import notificationRoutes from "@modules/notifications/notifications.routes";
 import syncRoutes from "@modules/sync/sync.routes";
 import archiveRoutes from "@modules/archive/archive.routes";
 import subscriptionRoutes from "@modules/subscriptions/subscriptions.routes";
+import adminRoutes from "@modules/admin/admin.routes";
+import inboxRoutes from "@modules/inbox/inbox.routes";
 
 export const app = express();
 
@@ -58,6 +60,12 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/archive", archiveRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
+
+// Platform super-admin (separate from business OWNER routes)
+app.use("/api/admin", adminRoutes);
+
+// WhatsApp conversation inbox
+app.use("/api/inbox", inboxRoutes);
 
 // Must be registered last
 app.use(errorMiddleware);

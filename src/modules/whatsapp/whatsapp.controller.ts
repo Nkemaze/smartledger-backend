@@ -6,6 +6,7 @@ import { env } from "@config/env";
 import { prisma } from "@config/database";
 import { ValidationError, NotFoundError } from "@utils/errors";
 import { computeDailySummary } from "@jobs/dailySalesSummary.job";
+import * as inboxService from "@modules/inbox/inbox.service";
 import { getBaileysStatus } from "@services/baileys.service";
 import {
   sendTextMessage,
@@ -45,8 +46,13 @@ export const webhookReceive = asyncHandler(async (req: WebhookRequest, res: Resp
     const message = req.body?.data?.message ?? (eventName === "new_message" ? req.body?.data : undefined);
     if (message) {
       const sender = message.sender_id ?? message.from ?? "unknown";
-      logger.info(`[WhatsApp] inbound message from ${sender}: ${JSON.stringify(message.text ?? "")}`);
-      // TODO: route inbound messages to the AI advisor / human inbox (SRS: WA-REQ-004).
+      await inboxService.recordInboundMessage({
+        from: sender,
+        text: message.text ?? message.body ?? "",
+        messageType: message.type ?? "text",
+        providerMsgId: message.id ?? message.message_id,
+      });
+      logger.info(`[WhatsApp] inbound message from ${sender}`);
     }
     res.sendStatus(200);
     return;
@@ -57,10 +63,18 @@ export const webhookReceive = asyncHandler(async (req: WebhookRequest, res: Resp
   const status = value?.statuses?.[0];
 
   if (message) {
-    logger.info(`[WhatsApp] inbound message from ${message.from}: ${JSON.stringify(message.text ?? message.type)}`);
-    // TODO: route inbound messages to the AI advisor / human inbox (SRS: WA-REQ-004).
+    const text =
+      message.text?.body ?? message.image?.caption ?? message.extendedText?.text ?? `[${message.type}]`;
+    await inboxService.recordInboundMessage({
+      from: message.from,
+      text,
+      messageType: message.type ?? "text",
+      providerMsgId: message.id,
+    });
+    logger.info(`[WhatsApp] inbound message from ${message.from}`);
   }
   if (status) {
+    await inboxService.recordStatusUpdate(status.id, status.status);
     logger.info(`[WhatsApp] delivery status ${status.status} for ${status.id}`);
   }
 
