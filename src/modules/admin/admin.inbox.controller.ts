@@ -5,43 +5,27 @@ import { z } from "zod";
 import * as inboxService from "@modules/inbox/inbox.service";
 
 /**
- * Resolves the inbox scope from the query string:
- *  - `businessId=<id>`  → that store only
- *  - `businessId=unassigned` → messages with no business (sent to the platform)
- *  - omitted            → every business (full platform oversight)
+ * The platform inbox is exactly the messages sent to the platform's WhatsApp
+ * number — those with no business attached (businessId = null). Businesses
+ * receive their own WhatsApp messages directly, so there is no store filter.
  */
-function parseScope(req: Request): inboxService.AdminInboxScope {
-  const raw = typeof req.query.businessId === "string" ? req.query.businessId : undefined;
-  if (raw === undefined) return {};
-  if (raw === "unassigned") return { businessId: null };
-  return { businessId: raw };
-}
-
-export const listConversations = asyncHandler(async (req: Request, res: Response) => {
-  const conversations = await inboxService.listAdminConversations(parseScope(req));
+export const listConversations = asyncHandler(async (_req: Request, res: Response) => {
+  const conversations = await inboxService.listAdminConversations();
   return ok(res, conversations);
 });
 
-export const unreadCount = asyncHandler(async (req: Request, res: Response) => {
-  const count = await inboxService.adminUnreadCount(parseScope(req));
+export const unreadCount = asyncHandler(async (_req: Request, res: Response) => {
+  const count = await inboxService.adminUnreadCount();
   return ok(res, { count });
 });
 
-export const listBusinesses = asyncHandler(async (_req: Request, res: Response) => {
-  const businesses = await inboxService.listInboxBusinesses();
-  return ok(res, businesses);
-});
-
 export const getThread = asyncHandler(async (req: Request, res: Response) => {
-  const messages = await inboxService.listAdminThread(parseScope(req), req.params.phone);
+  const messages = await inboxService.listAdminThread(req.params.phone);
   return ok(res, messages);
 });
 
 export const sendReply = asyncHandler(async (req: Request, res: Response) => {
   const { text } = z.object({ text: z.string().min(1).max(4096) }).parse(req.body);
-  const scope = parseScope(req);
-  // Replies are stored against the scoped business (or unassigned for platform).
-  const businessId = scope.businessId === undefined ? null : scope.businessId;
-  const message = await inboxService.sendReply(businessId, req.params.phone, text);
+  const message = await inboxService.sendReply(null, req.params.phone, text);
   return ok(res, message);
 });

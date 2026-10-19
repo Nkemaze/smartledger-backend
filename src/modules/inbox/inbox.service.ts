@@ -1,6 +1,6 @@
 import { prisma } from "@config/database";
 import { logger } from "@utils/logger";
-import { NotFoundError, ValidationError } from "@utils/errors";
+import { ValidationError } from "@utils/errors";
 import { sendTextMessage } from "@services/whatsapp.service";
 import { MessageDirection } from "@prisma/client";
 
@@ -92,56 +92,6 @@ export interface ConversationSummary {
   unreadCount: number;
 }
 
-/** One row per contact: last message + unread count, newest conversation first. */
-export async function listConversations(businessId: string): Promise<ConversationSummary[]> {
-  const messages = await prisma.whatsappMessage.findMany({
-    where: { businessId },
-    orderBy: { createdAt: "desc" },
-    take: 1000,
-  });
-
-  const byContact = new Map<string, ConversationSummary>();
-  for (const m of messages) {
-    const existing = byContact.get(m.contactPhone);
-    if (!existing) {
-      byContact.set(m.contactPhone, {
-        contactPhone: m.contactPhone,
-        contactName: m.contactName,
-        lastMessage: m.text,
-        lastDirection: m.direction,
-        lastAt: m.createdAt.toISOString(),
-        unreadCount: 0,
-      });
-    }
-    if (m.direction === MessageDirection.INBOUND && m.status !== "read") {
-      const conv = byContact.get(m.contactPhone)!;
-      conv.unreadCount += 1;
-    }
-  }
-  return Array.from(byContact.values());
-}
-
-/** Full thread with one contact, oldest first. Marks inbound as read. */
-export async function listThread(businessId: string, contactPhone: string) {
-  const norm = normalisePhone(contactPhone);
-
-  await prisma.whatsappMessage.updateMany({
-    where: { businessId, contactPhone: norm, direction: MessageDirection.INBOUND, status: { not: "read" } },
-    data: { status: "read" },
-  });
-
-  return prisma.whatsappMessage.findMany({
-    where: { businessId, contactPhone: norm },
-    orderBy: { createdAt: "asc" },
-  });
-}
-
-export async function unreadCount(businessId: string) {
-  return prisma.whatsappMessage.count({
-    where: { businessId, direction: MessageDirection.INBOUND, status: { not: "read" } },
-  });
-}
-
 /** Sends a reply through the active WhatsApp provider and stores it as OUTBOUND. */
 export async function sendReply(businessId: string | null, contactPhone: string, text: string) {
   const trimmed = text.trim();
@@ -169,10 +119,9 @@ export async function sendReply(businessId: string | null, contactPhone: string,
 // ---------------------------------------------------------------------------
 // Platform super-admin inbox
 //
-// The admin sees messages across every business. A `businessId` filter of
-// "unassigned" narrows to messages sent directly to the platform number
-// (businessId = null); a concrete business id scopes to that store. Omitting
-// the filter returns everything (full platform oversight).
+// The platform's WhatsApp number only ever receives messages that are not tied
+// to any store (businessId = null) — businesses handle their own WhatsApp
+// directly. So the admin inbox is exactly the unassigned set.
 // ---------------------------------------------------------------------------
 
 export interface AdminConversationSummary extends ConversationSummary {
@@ -180,18 +129,10 @@ export interface AdminConversationSummary extends ConversationSummary {
   businessName: string | null
 }
 
-export type AdminInboxScope = { businessId?: string | null }
-
-function adminWhere(scope: AdminInboxScope) {
-  if (scope.businessId === undefined) return {}
-  if (scope.businessId === null) return { businessId: null }
-  return { businessId: scope.businessId }
-}
-
-/** One row per (contact, business): last message + unread count. */
-export async function listAdminConversations(scope: AdminInboxScope = {}): Promise<AdminConversationSummary[]> {
+/** One row per contact: last message + unread count. */
+export async function listAdminConversations(): Promise<AdminConversationSummary[]> {
   const messages = await prisma.whatsappMessage.findMany({
-    where: adminWhere(scope),
+    where: { businessId: null },
     orderBy: { createdAt: "desc" },
     take: 2000,
     include: { business: { select: { id: true, name: true } } },
@@ -199,7 +140,7 @@ export async function listAdminConversations(scope: AdminInboxScope = {}): Promi
 
   const byKey = new Map<string, AdminConversationSummary>()
   for (const m of messages) {
-    const key = `${m.businessId ?? "unassigned"}::${m.contactPhone}`
+    const key = m.contactPhone
     const existing = byKey.get(key)
     if (!existing) {
       byKey.set(key, {
@@ -220,13 +161,13 @@ export async function listAdminConversations(scope: AdminInboxScope = {}): Promi
   return Array.from(byKey.values())
 }
 
-/** Full thread with one contact within a scope. Marks inbound as read. */
-export async function listAdminThread(scope: AdminInboxScope, contactPhone: string) {
+/** Full thread with one contact. Marks inbound as read. */
+export async function listAdminThread(contactPhone: string) {
   const norm = normalisePhone(contactPhone)
 
   await prisma.whatsappMessage.updateMany({
     where: {
-      ...adminWhere(scope),
+      businessId: null,
       contactPhone: norm,
       direction: MessageDirection.INBOUND,
       status: { not: "read" },
@@ -235,23 +176,13 @@ export async function listAdminThread(scope: AdminInboxScope, contactPhone: stri
   })
 
   return prisma.whatsappMessage.findMany({
-    where: { ...adminWhere(scope), contactPhone: norm },
+    where: { businessId: null, contactPhone: norm },
     orderBy: { createdAt: "asc" },
   })
 }
 
-export async function adminUnreadCount(scope: AdminInboxScope = {}) {
+export async function adminUnreadCount() {
   return prisma.whatsappMessage.count({
-    where: { ...adminWhere(scope), direction: MessageDirection.INBOUND, status: { not: "read" } },
+    where: { businessId: null, direction: MessageDirection.INBOUND, status: { not: "read" } },
   })
-}
-
-/** Businesses that have at least one WhatsApp conversation, for the filter. */
-export async function listInboxBusinesses() {
-  const rows = await prisma.whatsappMessage.findMany({
-    where: { businessId: { not: null } },
-    distinct: ["businessId"],
-    select: { business: { select: { id: true, name: true } } },
-  })
-  return rows.map((r) => r.business!).filter(Boolean)
 }

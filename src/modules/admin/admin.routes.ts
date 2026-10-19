@@ -17,8 +17,7 @@ router.get("/users", adminController.listUsers);
 router.patch("/users/:id/active", adminController.setUserActive);
 router.patch("/businesses/:id/subscription", adminController.extendSubscription);
 
-// Platform inbox — messages across all businesses (optionally scoped).
-router.get("/inbox/businesses", adminInboxController.listBusinesses);
+// Platform inbox — messages sent to the platform's WhatsApp number.
 router.get("/inbox/conversations", adminInboxController.listConversations);
 router.get("/inbox/conversations/unread-count", adminInboxController.unreadCount);
 router.get("/inbox/conversations/:phone", adminInboxController.getThread);
